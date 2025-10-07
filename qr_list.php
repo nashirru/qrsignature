@@ -163,8 +163,11 @@ require_once 'includes/header.php';
                             <td class="px-6 py-4">
                                 <?php echo $row['expires_at'] ? date('d M Y', strtotime($row['expires_at'])) : 'Tidak ada'; ?>
                             </td>
-                            <td class="px-6 py-4">
-                                <a href="qr_list.php?action=delete&id=<?php echo $row['id']; ?>" class="font-medium text-red-600 hover:underline" onclick="return confirm('Yakin ingin menghapus QR code ini?');">Hapus</a>
+                            <td class="px-6 py-4 flex items-center space-x-4">
+                                <?php if(file_exists($qr_image_path)): ?>
+                                <a href="<?php echo $qr_image_path; ?>" download="qr-code-<?php echo htmlspecialchars($row['short_code']); ?>.png" class="text-green-600 hover:text-green-800" title="Download"><i class="fas fa-download"></i></a>
+                                <?php endif; ?>
+                                <a href="qr_list.php?action=delete&id=<?php echo $row['id']; ?>" class="text-red-600 hover:text-red-800" onclick="return confirm('Yakin ingin menghapus QR code ini?');" title="Hapus"><i class="fas fa-trash-alt"></i></a>
                             </td>
                         </tr>
                     <?php endwhile;

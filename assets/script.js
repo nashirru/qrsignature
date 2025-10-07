@@ -1,48 +1,119 @@
-// assets/script.js
-
 document.addEventListener('DOMContentLoaded', function() {
-    const canvas = document.getElementById('signature-pad');
-    if (!canvas) return;
+    // --- Logika Hamburger Menu ---
+    const hamburgerBtn = document.getElementById('hamburger-btn');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
 
-    const signaturePad = new SignaturePad(canvas, {
-        backgroundColor: 'rgb(255, 255, 255)'
-    });
+    if (hamburgerBtn && sidebar && sidebarOverlay) {
+        hamburgerBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('-translate-x-full');
+            sidebarOverlay.classList.toggle('hidden');
+        });
 
-    // Adjust canvas size on window resize
-    function resizeCanvas() {
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        canvas.getContext("2d").scale(ratio, ratio);
-        signaturePad.clear(); // otherwise strokes will be resized
-    }
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
-
-
-    const clearButton = document.getElementById('clear-signature');
-    if (clearButton) {
-        clearButton.addEventListener('click', function() {
-            signaturePad.clear();
+        sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.add('-translate-x-full');
+            sidebarOverlay.classList.add('hidden');
         });
     }
 
-    const form = document.getElementById('signatureForm');
-    const saveButton = document.getElementById('save-btn');
-    if (form && saveButton) {
-        saveButton.addEventListener('click', function(event) {
-            if (signaturePad.isEmpty()) {
-                // If the user wants to upload, it's fine if the pad is empty
-                const fileInput = document.getElementById('signature_file');
-                if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-                     // But if they are in the "draw" tab and it's empty, we might want to alert them.
-                     // For simplicity, we'll allow submitting if an existing signature is already there.
-                }
-            } else {
-                // If something is drawn, convert to Base64 and put it in the hidden field
-                const dataURL = signaturePad.toDataURL('image/png');
-                document.getElementById('signature_base64').value = dataURL;
+    // --- Logika Modal Generik ---
+    const initModal = (modalId, openBtnId) => {
+        const modal = document.getElementById(modalId);
+        const openBtn = document.getElementById(openBtnId);
+        if (!modal || !openBtn) return;
+        
+        const closeBtns = modal.querySelectorAll('.close-modal');
+
+        openBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+        
+        closeBtns.forEach(btn => {
+            btn.addEventListener('click', () => modal.classList.add('hidden'));
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
             }
         });
+    };
+    
+    // Inisialisasi semua modal
+    initModal('generate-qr-modal', 'open-generate-qr-modal');
+    initModal('add-person-modal', 'open-add-person-modal');
+    initModal('add-signature-modal', 'open-add-signature-modal');
+
+
+    // --- Logika untuk Papan Tanda Tangan ---
+    const canvas = document.getElementById('signature-pad');
+    if (canvas) {
+        let signaturePad;
+        try {
+            signaturePad = new SignaturePad(canvas, {
+                backgroundColor: 'rgb(243, 244, 246)' // Warna bg-gray-100
+            });
+        } catch (e) {
+            console.error("Gagal menginisialisasi SignaturePad:", e);
+            return;
+        }
+
+        const clearButton = document.getElementById('clear-signature-btn');
+        if (clearButton) {
+            clearButton.addEventListener('click', () => signaturePad.clear());
+        }
+
+        const signatureForm = document.getElementById('signature-form');
+        if (signatureForm) {
+            signatureForm.addEventListener('submit', function(event) {
+                const drawTabContent = document.getElementById('draw-tab-content');
+                if (drawTabContent && !drawTabContent.classList.contains('hidden')) {
+                     if (signaturePad.isEmpty()) {
+                        document.getElementById('signature_data').value = '';
+                    } else {
+                        document.getElementById('signature_data').value = signaturePad.toDataURL('image/png');
+                    }
+                }
+            });
+        }
+        
+        function resizeCanvas() {
+            const ratio =  Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+            signaturePad.fromData(signaturePad.toData()); // Redraw signature
+        }
+
+        const resizeObserver = new ResizeObserver(() => resizeCanvas());
+        resizeObserver.observe(canvas.parentElement);
+        
+        // --- Logika Tab Tanda Tangan ---
+        const uploadTab = document.getElementById('upload-tab');
+        const drawTab = document.getElementById('draw-tab');
+        const uploadContent = document.getElementById('upload-tab-content');
+        const drawContent = document.getElementById('draw-tab-content');
+
+        if (uploadTab && drawTab && uploadContent && drawContent) {
+            const setActiveTab = (activeTab) => {
+                const inactiveTab = activeTab === 'upload' ? 'draw' : 'upload';
+                
+                document.getElementById(`${activeTab}-tab-content`).classList.remove('hidden');
+                document.getElementById(`${inactiveTab}-tab-content`).classList.add('hidden');
+                
+                document.getElementById(`${activeTab}-tab`).classList.add('border-blue-500', 'text-blue-600');
+                document.getElementById(`${activeTab}-tab`).classList.remove('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+                
+                document.getElementById(`${inactiveTab}-tab`).classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+                document.getElementById(`${inactiveTab}-tab`).classList.remove('border-blue-500', 'text-blue-600');
+            };
+
+            uploadTab.addEventListener('click', () => setActiveTab('upload'));
+            drawTab.addEventListener('click', () => {
+                setActiveTab('draw');
+                setTimeout(() => resizeCanvas(), 10); // Resize setelah tab aktif
+            });
+            
+            // Atur tab default
+            setActiveTab('upload');
+        }
     }
 });
