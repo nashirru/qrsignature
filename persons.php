@@ -30,7 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif ($_FILES['photo']['size'] > 2000000) {
                 $error = "Ukuran file terlalu besar. Maksimal 2MB.";
             } elseif (move_uploaded_file($_FILES['photo']['tmp_name'], $target_file)) {
-                // Hapus foto lama jika ada
                 if ($photo_url && file_exists($photo_url)) {
                     unlink($photo_url);
                 }
@@ -51,7 +50,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $success = "Data diri berhasil ditambahkan.";
             }
 
-            if (!$stmt->execute()) {
+            if ($stmt->execute()) {
+                 if ($id > 0) {
+                    // Redirect to clean URL after successful update
+                    header("Location: persons.php?success=update");
+                    exit();
+                }
+                $success = $id > 0 ? "Data diri berhasil diperbarui." : "Data diri berhasil ditambahkan.";
+            } else {
                 $error = "Operasi gagal: " . $stmt->error;
                 $success = '';
             }
@@ -60,10 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-
 // Handle delete
 if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])) {
     $id = (int)$_GET['id'];
+    // First, retrieve the photo URL to delete the file
     $stmt = $conn->prepare("SELECT photo_url FROM persons WHERE id = ?");
     $stmt->bind_param("i", $id);
     $stmt->execute();
@@ -85,6 +91,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
     $stmt->close();
 }
 
+// Check for success message from redirect
+if(isset($_GET['success']) && $_GET['success'] == 'update'){
+    $success = "Data diri berhasil diperbarui.";
+}
+
 $edit_person = null;
 if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) {
     $id = (int)$_GET['id'];
@@ -99,57 +110,52 @@ if (isset($_GET['action']) && $_GET['action'] === 'edit' && isset($_GET['id'])) 
 require_once 'includes/header.php';
 ?>
 
-<div class="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
+<div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Manajemen Data Diri</h1>
-     <button id="open-add-person-modal" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shadow-md flex items-center justify-center">
-        <i class="fas fa-plus mr-2"></i>
-        <span>Tambah Data Diri</span>
-    </button>
 </div>
-
 
 <?php if ($success) : ?><div class="bg-green-100 text-green-700 p-3 rounded mb-4"><?php echo $success; ?></div><?php endif; ?>
 <?php if ($error) : ?><div class="bg-red-100 text-red-700 p-3 rounded mb-4"><?php echo $error; ?></div><?php endif; ?>
 
-<!-- Add/Edit Person Modal -->
-<div id="add-person-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-40">
-    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-semibold"><?php echo $edit_person ? 'Edit Data Diri' : 'Tambah Data Diri Baru'; ?></h2>
-            <button class="close-modal text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+<!-- Add/Edit Person Form -->
+<div class="bg-white p-6 rounded-xl shadow-md mb-8">
+    <h2 class="text-xl font-semibold mb-6 border-b pb-4"><?php echo $edit_person ? 'Edit Data Diri' : 'Tambah Data Diri Baru'; ?></h2>
+    <form method="POST" action="persons.php" enctype="multipart/form-data">
+        <input type="hidden" name="id" value="<?php echo $edit_person['id'] ?? ''; ?>">
+        <input type="hidden" name="existing_photo" value="<?php echo $edit_person['photo_url'] ?? ''; ?>">
+        <div class="space-y-4">
+            <div>
+                <label for="full_name" class="block text-sm font-medium text-gray-700">Nama Lengkap</label>
+                <input type="text" name="full_name" id="full_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="<?php echo htmlspecialchars($edit_person['full_name'] ?? ''); ?>" required>
+            </div>
+            <div>
+                <label for="position" class="block text-sm font-medium text-gray-700">Jabatan</label>
+                <input type="text" name="position" id="position" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="<?php echo htmlspecialchars($edit_person['position'] ?? ''); ?>" required>
+            </div>
+             <div>
+                <label for="photo" class="block text-sm font-medium text-gray-700">Foto</label>
+                <input type="file" name="photo" id="photo" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                <?php if (!empty($edit_person['photo_url'])): ?>
+                    <div class="mt-2">
+                        <p class="text-xs text-gray-500 mb-1">Foto saat ini:</p>
+                        <img src="<?php echo htmlspecialchars($edit_person['photo_url']); ?>" alt="Current Photo" class="h-20 w-20 rounded-full object-cover">
+                    </div>
+                <?php endif; ?>
+            </div>
         </div>
-        <form method="POST" action="persons.php" enctype="multipart/form-data">
-            <input type="hidden" name="id" value="<?php echo $edit_person['id'] ?? ''; ?>">
-            <input type="hidden" name="existing_photo" value="<?php echo $edit_person['photo_url'] ?? ''; ?>">
-            <div class="space-y-4">
-                <div>
-                    <label for="full_name" class="block text-sm font-medium text-gray-700">Nama Lengkap</label>
-                    <input type="text" name="full_name" id="full_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="<?php echo htmlspecialchars($edit_person['full_name'] ?? ''); ?>" required>
-                </div>
-                <div>
-                    <label for="position" class="block text-sm font-medium text-gray-700">Jabatan</label>
-                    <input type="text" name="position" id="position" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value="<?php echo htmlspecialchars($edit_person['position'] ?? ''); ?>" required>
-                </div>
-                 <div>
-                    <label for="photo" class="block text-sm font-medium text-gray-700">Foto</label>
-                    <input type="file" name="photo" id="photo" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                    <?php if (!empty($edit_person['photo_url'])): ?>
-                        <div class="mt-2">
-                            <img src="<?php echo htmlspecialchars($edit_person['photo_url']); ?>" alt="Current Photo" class="h-20 w-20 rounded-full object-cover">
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <div class="flex justify-end mt-6 pt-4 border-t">
-                 <button type="button" class="close-modal bg-gray-200 text-gray-800 px-5 py-2 rounded-lg hover:bg-gray-300 mr-3">Batal</button>
-                <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-500 active:bg-blue-700"><?php echo $edit_person ? 'Perbarui' : 'Simpan'; ?></button>
-            </div>
-        </form>
-    </div>
+        <div class="flex justify-end mt-6 pt-4 border-t">
+            <?php if ($edit_person): ?>
+            <a href="persons.php" class="bg-gray-200 text-gray-800 px-5 py-2 rounded-lg hover:bg-gray-300 mr-3">Batal</a>
+            <?php endif; ?>
+            <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-500 active:bg-blue-700">
+                <i class="fas fa-save mr-2"></i><?php echo $edit_person ? 'Perbarui' : 'Simpan'; ?>
+            </button>
+        </div>
+    </form>
 </div>
 
-
 <!-- Persons List -->
+<h2 class="text-xl font-semibold text-gray-800 mb-4">Daftar Data Diri</h2>
 <div class="bg-white rounded-xl shadow-md overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full text-sm text-left text-gray-500">
@@ -169,7 +175,7 @@ require_once 'includes/header.php';
                 while($row = $result->fetch_assoc()): ?>
                     <tr class="bg-white border-b hover:bg-gray-50">
                         <td class="px-6 py-4">
-                            <img src="<?php echo !empty($row['photo_url']) ? htmlspecialchars($row['photo_url']) : 'https://via.placeholder.com/50'; ?>" alt="Foto" class="h-10 w-10 rounded-full object-cover">
+                            <img src="<?php echo !empty($row['photo_url']) ? htmlspecialchars($row['photo_url']) : 'https://placehold.co/50x50/e2e8f0/e2e8f0?text='; ?>" alt="Foto" class="h-10 w-10 rounded-full object-cover">
                         </td>
                         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">
                             <?php echo htmlspecialchars($row['full_name']); ?>
@@ -185,7 +191,7 @@ require_once 'includes/header.php';
                 <?php endwhile;
             else: ?>
                 <tr>
-                    <td colspan="4" class="text-center py-4">Tidak ada data.</td>
+                    <td colspan="4" class="text-center py-4 text-gray-500">Belum ada data. Silakan tambahkan data diri baru.</td>
                 </tr>
             <?php endif; ?>
             </tbody>
@@ -194,9 +200,5 @@ require_once 'includes/header.php';
 </div>
 
 <?php
-// Jika mode edit aktif, buka modal secara otomatis
-if ($edit_person) {
-    echo "<script>document.addEventListener('DOMContentLoaded', () => { document.getElementById('open-add-person-modal').click(); });</script>";
-}
 require_once 'includes/footer.php';
 ?>
