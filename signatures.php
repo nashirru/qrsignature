@@ -17,38 +17,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $signature_id = $_POST['id'] ?? null;
     $signature_url = $_POST['existing_signature'] ?? '';
     $signature_base64 = $_POST['signature_base64'] ?? '';
+    
+    if (empty($person_id)) {
+        $error = "Person harus dipilih.";
+    } else {
+        if (!empty($signature_base64) && strpos($signature_base64, 'data:image/png;base64,') === 0) {
+            // Handle Base64 signature from canvas
+            $signature_url = $signature_base64;
+        } elseif (isset($_FILES['signature_file']) && $_FILES['signature_file']['error'] == 0) {
+            // Handle file upload
+            $target_dir = "assets/uploads/signatures/";
+            if (!is_dir($target_dir)) {
+                mkdir($target_dir, 0755, true);
+            }
+            $file_name = time() . '_' . basename($_FILES["signature_file"]["name"]);
+            $target_file = $target_dir . $file_name;
+            $fileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
 
-    if (!empty($signature_base64)) {
-        // Handle Base64 signature from canvas
-        $signature_url = $signature_base64;
-    } elseif (isset($_FILES['signature_file']) && $_FILES['signature_file']['error'] == 0) {
-        // Handle file upload
-        $target_dir = "assets/uploads/signatures/";
-        if (!is_dir($target_dir)) {
-            mkdir($target_dir, 0755, true);
-        }
-        $file_name = time() . '_' . basename($_FILES["signature_file"]["name"]);
-        $target_file = $target_dir . $file_name;
-        $fileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+            // Validation
+            if ($_FILES["signature_file"]["size"] > 2000000) { // 2MB
+                $error = "Ukuran file terlalu besar.";
+            } elseif (!in_array($fileType, ['png', 'svg'])) {
+                $error = "Hanya format PNG & SVG yang diizinkan.";
+            }
 
-        // Validation
-        if ($_FILES["signature_file"]["size"] > 2000000) { // 2MB
-            $error = "Ukuran file terlalu besar.";
-        } elseif (!in_array($fileType, ['png', 'svg'])) {
-            $error = "Hanya format PNG & SVG yang diizinkan.";
-        }
-
-        if (empty($error)) {
-            if (move_uploaded_file($_FILES["signature_file"]["tmp_name"], $target_file)) {
-                 if (!empty($signature_url) && file_exists($signature_url) && strpos($signature_url, 'data:image') !== 0) {
-                    unlink($signature_url);
+            if (empty($error)) {
+                if (move_uploaded_file($_FILES["signature_file"]["tmp_name"], $target_file)) {
+                     // Hapus signature lama jika ada dan bukan base64
+                     if (!empty($signature_url) && file_exists($signature_url) && strpos($signature_url, 'data:image') !== 0) {
+                        unlink($signature_url);
+                    }
+                    $signature_url = $target_file;
+                } else {
+                    $error = "Gagal mengunggah tanda tangan.";
                 }
-                $signature_url = $target_file;
-            } else {
-                $error = "Gagal mengunggah tanda tangan.";
             }
         }
     }
+
 
     if (empty($error)) {
         if ($signature_id) { // Update
@@ -60,15 +66,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = "Gagal memperbarui: " . $stmt->error;
             }
         } else { // Insert
-            $stmt = $conn->prepare("INSERT INTO signatures (person_id, signature_url) VALUES (?, ?)");
-            $stmt->bind_param("is", $person_id, $signature_url);
-            if ($stmt->execute()) {
-                $success = "Tanda tangan berhasil ditambahkan.";
+            if (empty($signature_url)) {
+                $error = "Tanda tangan tidak boleh kosong. Silakan upload file atau gambar langsung.";
             } else {
-                $error = "Gagal menambahkan: " . $stmt->error;
+                $stmt = $conn->prepare("INSERT INTO signatures (person_id, signature_url) VALUES (?, ?)");
+                $stmt->bind_param("is", $person_id, $signature_url);
+                if ($stmt->execute()) {
+                    $success = "Tanda tangan berhasil ditambahkan.";
+                } else {
+                    $error = "Gagal menambahkan: " . $stmt->error;
+                }
             }
         }
-        $stmt->close();
+        if (isset($stmt)) $stmt->close();
+        
         if ($success) {
             header("Location: signatures.php?success=" . urlencode($success));
             exit();
@@ -95,11 +106,17 @@ if ($action === 'delete' && $id) {
         header("Location: signatures.php?success=" . urlencode("Tanda tangan berhasil dihapus."));
         exit();
     } else {
-        $error = "Gagal menghapus data.";
+        header("Location: signatures.php?error=" . urlencode("Gagal menghapus data."));
+        exit();
     }
 }
 
-$success = $_GET['success'] ?? '';
+if (isset($_GET['success'])) {
+    $success = htmlspecialchars($_GET['success']);
+}
+if (isset($_GET['error'])) {
+    $error = htmlspecialchars($_GET['error']);
+}
 require_once 'includes/header.php';
 
 if ($action === 'add' || $action === 'edit') {
@@ -119,7 +136,7 @@ if ($action === 'add' || $action === 'edit') {
     <div class="bg-white p-6 rounded-xl shadow-md">
         <form id="signatureForm" method="POST" action="signatures.php" enctype="multipart/form-data" class="space-y-6">
             <input type="hidden" name="id" value="<?php echo $signature['id'] ?? ''; ?>">
-            <input type="hidden" name="existing_signature" value="<?php echo $signature['signature_url'] ?? ''; ?>">
+            <input type="hidden" name="existing_signature" value="<?php echo htmlspecialchars($signature['signature_url'] ?? ''); ?>">
             <input type="hidden" name="signature_base64" id="signature_base64">
             
             <div>
@@ -139,7 +156,7 @@ if ($action === 'add' || $action === 'edit') {
                  <div class="mb-4 border-b border-gray-200">
                     <nav class="-mb-px flex space-x-8" aria-label="Tabs">
                         <button type="button" @click="tab = 'upload'" :class="{ 'border-blue-500 text-blue-600': tab === 'upload', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'upload' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Upload File</button>
-                        <button type="button" @click="tab = 'draw'" :class="{ 'border-blue-500 text-blue-600': tab === 'draw', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'draw' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Gambar Langsung</button>
+                        <button type="button" @click="tab = 'draw'; $nextTick(() => { resizeCanvas() });" :class="{ 'border-blue-500 text-blue-600': tab === 'draw', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': tab !== 'draw' }" class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">Gambar Langsung</button>
                     </nav>
                 </div>
                 
@@ -154,7 +171,7 @@ if ($action === 'add' || $action === 'edit') {
 
                 <div x-show="tab === 'draw'" x-cloak>
                     <label class="block text-sm font-medium text-gray-700">Area Gambar</label>
-                    <div class="mt-1 border border-gray-300 rounded-md">
+                    <div class="mt-1 border border-gray-300 rounded-md touch-none">
                         <canvas id="signature-pad" class="w-full h-48"></canvas>
                     </div>
                     <button type="button" id="clear-signature" class="mt-2 text-sm text-blue-600 hover:underline">Bersihkan</button>
@@ -178,7 +195,8 @@ if ($action === 'add' || $action === 'edit') {
         <a href="signatures.php?action=add" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-500 active:bg-blue-700">Tambah Tanda Tangan</a>
     </div>
 
-    <?php if ($success) : ?><div class="bg-blue-100 text-blue-700 p-3 rounded mb-4"><?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+    <?php if ($success) : ?><div class="bg-blue-100 text-blue-700 p-3 rounded mb-4"><?php echo $success; ?></div><?php endif; ?>
+    <?php if ($error) : ?><div class="bg-red-100 text-red-700 p-3 rounded mb-4"><?php echo $error; ?></div><?php endif; ?>
 
     <div class="bg-white rounded-xl shadow-md overflow-hidden">
          <div class="overflow-x-auto">
@@ -212,7 +230,7 @@ if ($action === 'add' || $action === 'edit') {
                                 </td>
                                 <td class="px-6 py-4 flex items-center space-x-2">
                                     <a href="signatures.php?action=edit&id=<?php echo $row['id']; ?>" class="font-medium text-blue-600 hover:underline">Edit</a>
-                                    <a href="signatures.php?action=delete&id=<?php echo $row['id']; ?>" class="font-medium text-red-600 hover:underline" onclick="return confirm('Apakah Anda yakin ingin menghapus data ini?');">Hapus</a>
+                                    <a href="signatures.php?action=delete&id=<?php echo $row['id']; ?>" class="font-medium text-red-600 hover:underline" onclick="return confirm('Apakah Anda yakin ingin menghapus data ini? Ini juga akan menghapus QR code terkait.');">Hapus</a>
                                 </td>
                             </tr>
                         <?php endwhile;

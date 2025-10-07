@@ -13,43 +13,48 @@ $success = '';
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $full_name = $conn->real_escape_string($_POST['full_name']);
-    $position = $conn->real_escape_string($_POST['position']);
+    $full_name = trim($_POST['full_name']);
+    $position = trim($_POST['position']);
     $person_id = $_POST['id'] ?? null;
     $photo_url = $_POST['existing_photo'] ?? '';
 
-    // Photo upload handling
-    if (isset($_FILES['photo']) && $_FILES['photo']['error'] == 0) {
-        $target_dir = "assets/uploads/photos/";
-        if (!is_dir($target_dir)) {
-            mkdir($target_dir, 0755, true);
-        }
-        $file_name = time() . '_' . basename($_FILES["photo"]["name"]);
-        $target_file = $target_dir . $file_name;
-        $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
+    if (empty($full_name) || empty($position)) {
+        $error = "Nama lengkap dan jabatan wajib diisi.";
+    } else {
+        // Photo upload handling
+        if (isset($_FILES['photo']) && $_FILES['photo']['error'] == 0) {
+            $target_dir = "assets/uploads/photos/";
+            if (!is_dir($target_dir)) {
+                mkdir($target_dir, 0755, true);
+            }
+            $file_name = time() . '_' . basename($_FILES["photo"]["name"]);
+            $target_file = $target_dir . $file_name;
+            $imageFileType = strtolower(pathinfo($target_file, PATHINFO_EXTENSION));
 
-        // Validation
-        $check = getimagesize($_FILES["photo"]["tmp_name"]);
-        if ($check === false) {
-            $error = "File bukan gambar.";
-        } elseif ($_FILES["photo"]["size"] > 2000000) { // 2MB
-            $error = "Ukuran file terlalu besar.";
-        } elseif (!in_array($imageFileType, ['jpg', 'png', 'jpeg', 'gif'])) {
-            $error = "Hanya format JPG, JPEG, PNG & GIF yang diizinkan.";
-        }
+            // Validation
+            $check = getimagesize($_FILES["photo"]["tmp_name"]);
+            if ($check === false) {
+                $error = "File bukan gambar.";
+            } elseif ($_FILES["photo"]["size"] > 2000000) { // 2MB
+                $error = "Ukuran file terlalu besar.";
+            } elseif (!in_array($imageFileType, ['jpg', 'png', 'jpeg', 'gif'])) {
+                $error = "Hanya format JPG, JPEG, PNG & GIF yang diizinkan.";
+            }
 
-        if (empty($error)) {
-            if (move_uploaded_file($_FILES["photo"]["tmp_name"], $target_file)) {
-                // Hapus foto lama jika ada
-                if (!empty($photo_url) && file_exists($photo_url)) {
-                    unlink($photo_url);
+            if (empty($error)) {
+                if (move_uploaded_file($_FILES["photo"]["tmp_name"], $target_file)) {
+                    // Hapus foto lama jika ada
+                    if (!empty($photo_url) && file_exists($photo_url)) {
+                        unlink($photo_url);
+                    }
+                    $photo_url = $target_file;
+                } else {
+                    $error = "Gagal mengunggah foto.";
                 }
-                $photo_url = $target_file;
-            } else {
-                $error = "Gagal mengunggah foto.";
             }
         }
     }
+
 
     if (empty($error)) {
         if ($person_id) { // Update
@@ -97,11 +102,18 @@ if ($action === 'delete' && $id) {
         header("Location: persons.php?success=" . urlencode("Data person berhasil dihapus."));
         exit();
     } else {
-        $error = "Gagal menghapus data.";
+        // Redirect dengan pesan error jika diperlukan
+        header("Location: persons.php?error=" . urlencode("Gagal menghapus data."));
+        exit();
     }
 }
 
-$success = $_GET['success'] ?? '';
+if (isset($_GET['success'])) {
+    $success = htmlspecialchars($_GET['success']);
+}
+if (isset($_GET['error'])) {
+    $error = htmlspecialchars($_GET['error']);
+}
 
 require_once 'includes/header.php';
 
@@ -151,7 +163,9 @@ if ($action === 'add' || $action === 'edit') {
         <a href="persons.php?action=add" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-500 active:bg-blue-700">Tambah Person</a>
     </div>
 
-    <?php if ($success) : ?><div class="bg-blue-100 text-blue-700 p-3 rounded mb-4"><?php echo htmlspecialchars($success); ?></div><?php endif; ?>
+    <?php if ($success) : ?><div class="bg-blue-100 text-blue-700 p-3 rounded mb-4"><?php echo $success; ?></div><?php endif; ?>
+    <?php if ($error) : ?><div class="bg-red-100 text-red-700 p-3 rounded mb-4"><?php echo $error; ?></div><?php endif; ?>
+
 
     <div class="bg-white rounded-xl shadow-md overflow-hidden">
         <div class="overflow-x-auto">
@@ -181,7 +195,7 @@ if ($action === 'add' || $action === 'edit') {
                                 </td>
                                 <td class="px-6 py-4 flex items-center space-x-2">
                                     <a href="persons.php?action=edit&id=<?php echo $row['id']; ?>" class="font-medium text-blue-600 hover:underline">Edit</a>
-                                    <a href="persons.php?action=delete&id=<?php echo $row['id']; ?>" class="font-medium text-red-600 hover:underline" onclick="return confirm('Apakah Anda yakin ingin menghapus data ini?');">Hapus</a>
+                                    <a href="persons.php?action=delete&id=<?php echo $row['id']; ?>" class="font-medium text-red-600 hover:underline" onclick="return confirm('Apakah Anda yakin ingin menghapus data ini? Menghapus person akan menghapus semua tanda tangan dan QR code terkait.');">Hapus</a>
                                 </td>
                             </tr>
                         <?php endwhile;

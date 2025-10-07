@@ -1,1 +1,3 @@
-Deny from all
+# Mencegah agar isi folder tidak bisa dilihat oleh pengunjung, tapi file tetap bisa diakses.
+# Ini akan memperbaiki error "403 Forbidden".
+Options -Indexes

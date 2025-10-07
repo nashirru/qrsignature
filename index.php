@@ -22,14 +22,23 @@ if (isset($_SESSION['user_id'])) {
 $error_message = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $email = $conn->real_escape_string($_POST['email']);
+    $email = $_POST['email'];
     $password = $_POST['password'];
 
-    $sql = "SELECT id, name, password_hash FROM users WHERE email = '$email'";
-    $result = $conn->query($sql);
+    // Gunakan prepared statement untuk keamanan
+    $stmt = $conn->prepare("SELECT id, name, password_hash FROM users WHERE email = ?");
+    if ($stmt === false) {
+        // Tampilkan error jika prepare gagal, untuk debugging
+        die('Prepare failed: ' . htmlspecialchars($conn->error));
+    }
+    
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $result = $stmt->get_result();
 
     if ($result && $result->num_rows > 0) {
         $user = $result->fetch_assoc();
+        // Verifikasi password
         if (password_verify($password, $user['password_hash'])) {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
@@ -41,6 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     } else {
         $error_message = 'Email atau password salah.';
     }
+    $stmt->close();
 }
 ?>
 
@@ -88,6 +98,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <p class="text-xs text-center text-gray-500">
             Login: admin@example.com | Pass: password123
         </p>
+         <div class="text-center text-sm mt-4">
+             <p class="text-gray-600">Belum punya akun? <a href="register.php" class="font-medium text-blue-600 hover:underline">Daftar di sini</a></p>
+        </div>
     </div>
 </body>
 </html>

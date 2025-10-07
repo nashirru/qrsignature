@@ -5,7 +5,14 @@
 
 require_once 'includes/auth.php';
 require_once 'includes/db.php';
-require_once 'lib/phpqrcode/qrlib.php';
+
+// Memperbaiki path require_once, membuatnya lebih andal
+// Pastikan folder 'lib' ada di direktori root proyek Anda.
+if (file_exists(__DIR__ . '/lib/phpqrcode/qrlib.php')) {
+    require_once __DIR__ . '/lib/phpqrcode/qrlib.php';
+} else {
+    die("Error: Pustaka QR Code tidak ditemukan. Pastikan file 'qrlib.php' ada di dalam direktori 'lib/phpqrcode/'.");
+}
 
 $error = '';
 $success = '';
@@ -63,8 +70,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
     } else {
         $error = "Gagal menghapus QR Code.";
     }
+    $stmt->close();
+    // Redirect untuk menghindari re-submission form saat refresh
+    header("Location: qr_list.php?success=" . urlencode($success));
+    exit();
 }
 
+// Ambil pesan sukses dari URL jika ada
+if (isset($_GET['success'])) {
+    $success = htmlspecialchars($_GET['success']);
+}
 
 require_once 'includes/header.php';
 ?>
@@ -72,8 +87,8 @@ require_once 'includes/header.php';
     <h1 class="text-3xl font-bold text-gray-800">QR Codes</h1>
 </div>
 
-<?php if ($success) : ?><div class="bg-blue-100 text-blue-700 p-3 rounded mb-4"><?php echo htmlspecialchars($success); ?></div><?php endif; ?>
-<?php if ($error) : ?><div class="bg-red-100 text-red-700 p-3 rounded mb-4"><?php echo htmlspecialchars($error); ?></div><?php endif; ?>
+<?php if ($success) : ?><div class="bg-blue-100 text-blue-700 p-3 rounded mb-4"><?php echo $success; ?></div><?php endif; ?>
+<?php if ($error) : ?><div class="bg-red-100 text-red-700 p-3 rounded mb-4"><?php echo $error; ?></div><?php endif; ?>
 
 
 <!-- Generate QR Form -->
